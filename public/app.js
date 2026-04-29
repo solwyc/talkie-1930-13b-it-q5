@@ -31,8 +31,13 @@ const speedValue = document.querySelector("#speedValue");
 const tokenValue = document.querySelector("#tokenValue");
 const elapsedValue = document.querySelector("#elapsedValue");
 
-const DEFAULT_SYSTEM_PROMPT = "Your name is John Talkie from Akron, Ohio";
-const LEGACY_SYSTEM_PROMPT = "Your name is Talkie. You are a local language model. Answer directly; do not invent personal history or sources.";
+const DEFAULT_SYSTEM_PROMPT = "";
+const DEFAULT_TEMPERATURE = "0.45";
+const SETTINGS_DEFAULTS_VERSION = "2026-04-29-empty-system-temp-045";
+const LEGACY_SYSTEM_PROMPTS = new Set([
+  "Your name is John Talkie from Akron, Ohio",
+  "Your name is Talkie. You are a local language model. Answer directly; do not invent personal history or sources.",
+]);
 
 const state = {
   messages: JSON.parse(localStorage.getItem("talkie.messages") || "[]"),
@@ -44,6 +49,7 @@ const state = {
 restoreSettings();
 renderMessages();
 refreshStatus();
+focusPrompt();
 setInterval(refreshStatus, 5000);
 
 temperature.addEventListener("input", () => {
@@ -199,6 +205,7 @@ async function streamReply(assistantMessage) {
     state.controller = null;
     state.isStreaming = false;
     setBusy(false);
+    focusPrompt();
     refreshStatus();
   }
 }
@@ -346,15 +353,22 @@ function persistMessages() {
 }
 
 function restoreSettings() {
+  const shouldMigrateDefaults = localStorage.getItem("talkie.settingsDefaultsVersion") !== SETTINGS_DEFAULTS_VERSION;
   const savedSystemPrompt = localStorage.getItem("talkie.systemPrompt");
-  systemPrompt.value = !savedSystemPrompt || savedSystemPrompt === LEGACY_SYSTEM_PROMPT
+  const useDefaultSystemPrompt = savedSystemPrompt === null || LEGACY_SYSTEM_PROMPTS.has(savedSystemPrompt);
+  systemPrompt.value = useDefaultSystemPrompt
     ? DEFAULT_SYSTEM_PROMPT
     : savedSystemPrompt;
+  if (shouldMigrateDefaults && useDefaultSystemPrompt) {
+    localStorage.setItem("talkie.systemPrompt", DEFAULT_SYSTEM_PROMPT);
+  }
 
   const savedGrounding = localStorage.getItem("talkie.grounding");
   groundingToggle.checked = savedGrounding === "1";
 
-  const savedSettings = safeJsonParse(localStorage.getItem("talkie.settings"));
+  const savedSettings = safeJsonParse(localStorage.getItem("talkie.settings")) || {};
+  temperature.value = DEFAULT_TEMPERATURE;
+  if (shouldMigrateDefaults) savedSettings.temperature = DEFAULT_TEMPERATURE;
   if (savedSettings) {
     if (savedSettings.temperature !== undefined) temperature.value = savedSettings.temperature;
     if (savedSettings.maxTokens !== undefined) maxTokens.value = savedSettings.maxTokens;
@@ -366,6 +380,10 @@ function restoreSettings() {
 
   temperatureOut.value = Number(temperature.value).toFixed(2);
   repetitionPenaltyOut.value = Number(repetitionPenalty.value).toFixed(2);
+  if (shouldMigrateDefaults) {
+    localStorage.setItem("talkie.settingsDefaultsVersion", SETTINGS_DEFAULTS_VERSION);
+    saveSettings();
+  }
 }
 
 function saveSettings() {
@@ -387,6 +405,12 @@ function showFeedback(message) {
     storageFeedback.textContent = "Saved locally";
     storageFeedback.dataset.state = "";
   }, 1800);
+}
+
+function focusPrompt() {
+  window.requestAnimationFrame(() => {
+    if (!promptEl.disabled) promptEl.focus();
+  });
 }
 
 function safeJsonParse(text) {
