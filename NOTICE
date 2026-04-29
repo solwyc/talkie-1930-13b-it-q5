@@ -1,0 +1,16 @@
+talkie-1930-13b-it-q5
+
+This repository packages an experimental Q5_0 GGUF derived from Talkie 1930
+13B IT, plus a local Node chat app and patched llama.cpp runtime notes.
+
+Upstream Talkie project:
+https://github.com/talkie-lm/talkie
+
+Talkie authors named in the upstream README:
+Alec Radford, Nick Levine, and David Duvenaud.
+
+Upstream llama.cpp project:
+https://github.com/ggml-org/llama.cpp
+
+The GGUF is not currently compatible with stock llama.cpp or stock LM Studio.
+It requires the Talkie architecture support described in this repository.

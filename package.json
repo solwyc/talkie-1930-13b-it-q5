@@ -1,0 +1,16 @@
+{
+  "name": "talkie-1930-13b-it-q5",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local Node web chat for the Talkie 1930 13B instruction-tuned Q5 GGUF.",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js --backend=llama",
+    "start:llama": "node server.js --backend=llama",
+    "start:llama:autoload": "node server.js --backend=llama --autoload",
+    "start:mock": "node server.js --mock"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

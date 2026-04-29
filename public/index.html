@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Talkie 13B Chat</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="chat-pane" aria-label="Chat">
+        <header class="top-bar">
+          <div class="brand-lockup">
+            <img src="/identity.png" alt="Talkie" class="brand-mark">
+            <div>
+              <h1>Talkie 13B</h1>
+              <p id="modelLine">talkie-1930-13b-it</p>
+            </div>
+          </div>
+          <div class="runtime-pill" id="runtimePill">
+            <span class="status-dot"></span>
+            <span id="runtimeText">Checking</span>
+          </div>
+        </header>
+
+        <div class="messages" id="messages" aria-live="polite"></div>
+
+        <form class="composer" id="composer">
+          <textarea id="prompt" name="prompt" rows="2" placeholder="Ask Talkie..." autocomplete="off"></textarea>
+          <div class="composer-actions">
+            <button type="button" id="clearBtn" class="ghost-button">Clear</button>
+            <button type="button" id="stopBtn" class="ghost-button" disabled>Stop</button>
+            <button type="submit" id="sendBtn" class="send-button">Send</button>
+          </div>
+        </form>
+      </section>
+
+      <aside class="control-pane" aria-label="Settings">
+        <section class="control-group">
+          <h2>Sampling</h2>
+          <label>
+            <span>Temperature</span>
+            <input id="temperature" type="range" min="0" max="1.5" step="0.05" value="0.45">
+            <output id="temperatureOut">0.45</output>
+          </label>
+          <label>
+            <span>Max tokens</span>
+            <input id="maxTokens" type="number" min="1" max="2048" step="1" value="256">
+          </label>
+          <label>
+            <span>Top p</span>
+            <input id="topP" type="number" min="0" max="1" step="0.01" value="0.9" placeholder="off">
+          </label>
+          <label>
+            <span>Top k</span>
+            <input id="topK" type="number" min="1" max="65536" step="1" value="80" placeholder="off">
+          </label>
+          <label>
+            <span>Repeat penalty</span>
+            <input id="repetitionPenalty" type="range" min="1" max="1.6" step="0.01" value="1.12">
+            <output id="repetitionPenaltyOut">1.12</output>
+          </label>
+          <label>
+            <span>No-repeat ngram</span>
+            <input id="noRepeatNgramSize" type="number" min="0" max="12" step="1" value="3">
+          </label>
+        </section>
+
+        <section class="control-group">
+          <h2>System</h2>
+          <textarea id="systemPrompt" rows="6" spellcheck="true" placeholder="Optional system message">Your name is Talkie. You are a local language model. Answer directly; do not invent personal history or sources.</textarea>
+          <label class="toggle-row">
+            <input id="groundingToggle" type="checkbox" checked>
+            <span>Ground identity</span>
+          </label>
+        </section>
+
+        <section class="control-group runtime-group">
+          <h2>Runtime</h2>
+          <div class="runtime-actions">
+            <button type="button" id="runtimeStartBtn" class="ghost-button">Start</button>
+            <button type="button" id="runtimeStopBtn" class="ghost-button">Stop</button>
+          </div>
+          <dl>
+            <div>
+              <dt>Backend</dt>
+              <dd id="backendValue">-</dd>
+            </div>
+            <div>
+              <dt>Quant</dt>
+              <dd id="quantValue">-</dd>
+            </div>
+            <div>
+              <dt>Worker</dt>
+              <dd id="workerValue">-</dd>
+            </div>
+            <div>
+              <dt>GPU layers</dt>
+              <dd id="gpuValue">-</dd>
+            </div>
+            <div>
+              <dt>Context</dt>
+              <dd id="contextValue">-</dd>
+            </div>
+            <div>
+              <dt>Direct replies</dt>
+              <dd id="directRepliesValue">-</dd>
+            </div>
+            <div>
+              <dt>Server</dt>
+              <dd id="serverValue">-</dd>
+            </div>
+            <div>
+              <dt>Speed</dt>
+              <dd id="speedValue">-</dd>
+            </div>
+            <div>
+              <dt>Tokens</dt>
+              <dd id="tokenValue">-</dd>
+            </div>
+            <div>
+              <dt>Elapsed</dt>
+              <dd id="elapsedValue">-</dd>
+            </div>
+          </dl>
+        </section>
+      </aside>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

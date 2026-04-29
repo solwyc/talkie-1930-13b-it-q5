@@ -1,0 +1,792 @@
+﻿diff --git a/src/llama-arch.cpp b/src/llama-arch.cpp
+index 633a66f..b459866 100644
+--- a/src/llama-arch.cpp
++++ b/src/llama-arch.cpp
+@@ -16,6 +16,7 @@ static const std::map<llm_arch, const char *> LLM_ARCH_NAMES = {
+     { LLM_ARCH_GPT2,             "gpt2"             },
+     { LLM_ARCH_GPTJ,             "gptj"             },
+     { LLM_ARCH_GPTNEOX,          "gptneox"          },
++    { LLM_ARCH_TALKIE,           "talkie"           },
+     { LLM_ARCH_MPT,              "mpt"              },
+     { LLM_ARCH_BAICHUAN,         "baichuan"         },
+     { LLM_ARCH_STARCODER,        "starcoder"        },
+@@ -342,21 +343,35 @@ static const std::map<llm_kv, const char *> LLM_KV_NAMES = {
+ 
+ static const std::map<llm_tensor, const char *> LLM_TENSOR_NAMES = {
+     { LLM_TENSOR_TOKEN_EMBD,                             "token_embd" },
++    { LLM_TENSOR_TALKIE_TOKEN_EMBD,                      "embed" },
+     { LLM_TENSOR_OUTPUT_NORM,                            "output_norm" },
+     { LLM_TENSOR_OUTPUT_NORM_LFM2,                       "token_embd_norm" }, // fix for wrong tensor name
+     { LLM_TENSOR_OUTPUT,                                 "output" },
++    { LLM_TENSOR_TALKIE_OUTPUT,                          "lm_head" },
++    { LLM_TENSOR_TALKIE_OUTPUT_GAIN,                     "lm_head_gain.w_g" },
+     { LLM_TENSOR_ROPE_FREQS,                             "rope_freqs" },
+     { LLM_TENSOR_ATTN_NORM,                              "blk.%d.attn_norm" },
+     { LLM_TENSOR_ATTN_Q,                                 "blk.%d.attn_q" },
+     { LLM_TENSOR_ATTN_K,                                 "blk.%d.attn_k" },
+     { LLM_TENSOR_ATTN_V,                                 "blk.%d.attn_v" },
+     { LLM_TENSOR_ATTN_OUT,                               "blk.%d.attn_output" },
++    { LLM_TENSOR_TALKIE_ATTN_Q,                          "blocks.%d.attn.attn_query" },
++    { LLM_TENSOR_TALKIE_ATTN_K,                          "blocks.%d.attn.attn_key" },
++    { LLM_TENSOR_TALKIE_ATTN_V,                          "blocks.%d.attn.attn_value" },
++    { LLM_TENSOR_TALKIE_ATTN_OUT,                        "blocks.%d.attn.attn_resid" },
++    { LLM_TENSOR_TALKIE_ATTN_HEAD_GAIN,                  "blocks.%d.attn.head_gain.head_g" },
++    { LLM_TENSOR_TALKIE_ATTN_GAIN,                       "blocks.%d.attn_gain.a_g" },
+     { LLM_TENSOR_ATTN_ROT_EMBD,                          "blk.%d.attn_rot_embd" },
+     { LLM_TENSOR_FFN_GATE_INP,                           "blk.%d.ffn_gate_inp" },
+     { LLM_TENSOR_FFN_NORM,                               "blk.%d.ffn_norm" },
+     { LLM_TENSOR_FFN_GATE,                               "blk.%d.ffn_gate" },
+     { LLM_TENSOR_FFN_DOWN,                               "blk.%d.ffn_down" },
+     { LLM_TENSOR_FFN_UP,                                 "blk.%d.ffn_up" },
++    { LLM_TENSOR_TALKIE_MLP_GATE,                        "blocks.%d.mlp.mlp_gate" },
++    { LLM_TENSOR_TALKIE_MLP_LINEAR,                      "blocks.%d.mlp.mlp_linear" },
++    { LLM_TENSOR_TALKIE_MLP_RESID,                       "blocks.%d.mlp.mlp_resid" },
++    { LLM_TENSOR_TALKIE_MLP_GAIN,                        "blocks.%d.mlp_gain.a_g" },
++    { LLM_TENSOR_TALKIE_EMBED_SKIP,                      "blocks.%d.embed_skip.a_g" },
+     { LLM_TENSOR_FFN_GATE_EXP,                           "blk.%d.ffn_gate.%d" },
+     { LLM_TENSOR_FFN_DOWN_EXP,                           "blk.%d.ffn_down.%d" },
+     { LLM_TENSOR_FFN_UP_EXP,                             "blk.%d.ffn_up.%d" },
+@@ -561,10 +576,13 @@ static const std::map<llm_tensor, const char *> LLM_TENSOR_NAMES = {
+ //
+ static const std::map<llm_tensor, llm_tensor_info> LLM_TENSOR_INFOS = {
+     {LLM_TENSOR_TOKEN_EMBD,                 {LLM_TENSOR_LAYER_INPUT,     GGML_OP_GET_ROWS}},
++    {LLM_TENSOR_TALKIE_TOKEN_EMBD,          {LLM_TENSOR_LAYER_INPUT,     GGML_OP_GET_ROWS}},
+     {LLM_TENSOR_POS_EMBD,                   {LLM_TENSOR_LAYER_INPUT,     GGML_OP_GET_ROWS}},
+     {LLM_TENSOR_TOKEN_TYPES,                {LLM_TENSOR_LAYER_INPUT,     GGML_OP_GET_ROWS}},
+     {LLM_TENSOR_TOKEN_EMBD_NORM,            {LLM_TENSOR_LAYER_REPEATING, GGML_OP_MUL}},  // do the norms on the first layer (not the input layer)
+     {LLM_TENSOR_OUTPUT,                     {LLM_TENSOR_LAYER_OUTPUT,    GGML_OP_MUL_MAT}},
++    {LLM_TENSOR_TALKIE_OUTPUT,              {LLM_TENSOR_LAYER_OUTPUT,    GGML_OP_MUL_MAT}},
++    {LLM_TENSOR_TALKIE_OUTPUT_GAIN,         {LLM_TENSOR_LAYER_OUTPUT,    GGML_OP_MUL}},
+     {LLM_TENSOR_CLS,                        {LLM_TENSOR_LAYER_OUTPUT,    GGML_OP_MUL_MAT}},
+     {LLM_TENSOR_CLS_OUT,                    {LLM_TENSOR_LAYER_OUTPUT,    GGML_OP_MUL_MAT}},
+     {LLM_TENSOR_CLS_NORM,                   {LLM_TENSOR_LAYER_OUTPUT,    GGML_OP_MUL}},
+@@ -582,10 +600,21 @@ static const std::map<llm_tensor, llm_tensor_info> LLM_TENSOR_INFOS = {
+     {LLM_TENSOR_ATTN_V,                     {LLM_TENSOR_LAYER_REPEATING, GGML_OP_MUL_MAT}},
+     {LLM_TENSOR_ATTN_QKV,                   {LLM_TENSOR_LAYER_REPEATING, GGML_OP_MUL_MAT}},
+     {LLM_TENSOR_ATTN_OUT,                   {LLM_TENSOR_LAYER_REPEATING, GGML_OP_MUL_MAT}},
++    {LLM_TENSOR_TALKIE_ATTN_Q,              {LLM_TENSOR_LAYER_REPEATING, GGML_OP_MUL_MAT}},
++    {LLM_TENSOR_TALKIE_ATTN_K,              {LLM_TENSOR_LAYER_REPEATING, GGML_OP_MUL_MAT}},
++    {LLM_TENSOR_TALKIE_ATTN_V,              {LLM_TENSOR_LAYER_REPEATING, GGML_OP_MUL_MAT}},
++    {LLM_TENSOR_TALKIE_ATTN_OUT,            {LLM_TENSOR_LAYER_REPEATING, GGML_OP_MUL_MAT}},
++    {LLM_TENSOR_TALKIE_ATTN_HEAD_GAIN,      {LLM_TENSOR_LAYER_REPEATING, GGML_OP_MUL}},
++    {LLM_TENSOR_TALKIE_ATTN_GAIN,           {LLM_TENSOR_LAYER_REPEATING, GGML_OP_MUL}},
+     {LLM_TENSOR_ATTN_GATE,                  {LLM_TENSOR_LAYER_REPEATING, GGML_OP_MUL_MAT}},
+     {LLM_TENSOR_FFN_GATE,                   {LLM_TENSOR_LAYER_REPEATING, GGML_OP_MUL_MAT}},
+     {LLM_TENSOR_FFN_DOWN,                   {LLM_TENSOR_LAYER_REPEATING, GGML_OP_MUL_MAT}},
+     {LLM_TENSOR_FFN_UP,                     {LLM_TENSOR_LAYER_REPEATING, GGML_OP_MUL_MAT}},
++    {LLM_TENSOR_TALKIE_MLP_GATE,            {LLM_TENSOR_LAYER_REPEATING, GGML_OP_MUL_MAT}},
++    {LLM_TENSOR_TALKIE_MLP_LINEAR,          {LLM_TENSOR_LAYER_REPEATING, GGML_OP_MUL_MAT}},
++    {LLM_TENSOR_TALKIE_MLP_RESID,           {LLM_TENSOR_LAYER_REPEATING, GGML_OP_MUL_MAT}},
++    {LLM_TENSOR_TALKIE_MLP_GAIN,            {LLM_TENSOR_LAYER_REPEATING, GGML_OP_MUL}},
++    {LLM_TENSOR_TALKIE_EMBED_SKIP,          {LLM_TENSOR_LAYER_REPEATING, GGML_OP_MUL}},
+     {LLM_TENSOR_FFN_DOWN_SHEXP,             {LLM_TENSOR_LAYER_REPEATING, GGML_OP_MUL_MAT}},
+     {LLM_TENSOR_FFN_GATE_SHEXP,             {LLM_TENSOR_LAYER_REPEATING, GGML_OP_MUL_MAT}},
+     {LLM_TENSOR_FFN_UP_SHEXP,               {LLM_TENSOR_LAYER_REPEATING, GGML_OP_MUL_MAT}},
+diff --git a/src/llama-arch.h b/src/llama-arch.h
+index 8f335f5..b7157f6 100644
+--- a/src/llama-arch.h
++++ b/src/llama-arch.h
+@@ -21,6 +21,7 @@ enum llm_arch {
+     LLM_ARCH_GPT2,
+     LLM_ARCH_GPTJ,
+     LLM_ARCH_GPTNEOX,
++    LLM_ARCH_TALKIE,
+     LLM_ARCH_MPT,
+     LLM_ARCH_STARCODER,
+     LLM_ARCH_REFACT,
+@@ -348,6 +349,7 @@ enum llm_kv {
+ enum llm_tensor {
+     LLM_TENSOR_TOKEN_EMBD,
+     LLM_TENSOR_TOKEN_EMBD_NORM,
++    LLM_TENSOR_TALKIE_TOKEN_EMBD,
+     LLM_TENSOR_TOKEN_TYPES,
+     LLM_TENSOR_POS_EMBD,
+     LLM_TENSOR_DENSE_2_OUT,
+@@ -355,6 +357,8 @@ enum llm_tensor {
+     LLM_TENSOR_OUTPUT,
+     LLM_TENSOR_OUTPUT_NORM,
+     LLM_TENSOR_OUTPUT_NORM_LFM2, // fix for wrong tensor name
++    LLM_TENSOR_TALKIE_OUTPUT,
++    LLM_TENSOR_TALKIE_OUTPUT_GAIN,
+     LLM_TENSOR_ROPE_FREQS,
+     LLM_TENSOR_ROPE_FACTORS_LONG,
+     LLM_TENSOR_ROPE_FACTORS_SHORT,
+@@ -363,6 +367,12 @@ enum llm_tensor {
+     LLM_TENSOR_ATTN_V,
+     LLM_TENSOR_ATTN_QKV,
+     LLM_TENSOR_ATTN_OUT,
++    LLM_TENSOR_TALKIE_ATTN_Q,
++    LLM_TENSOR_TALKIE_ATTN_K,
++    LLM_TENSOR_TALKIE_ATTN_V,
++    LLM_TENSOR_TALKIE_ATTN_OUT,
++    LLM_TENSOR_TALKIE_ATTN_HEAD_GAIN,
++    LLM_TENSOR_TALKIE_ATTN_GAIN,
+     LLM_TENSOR_ATTN_NORM,
+     LLM_TENSOR_ATTN_NORM_2,
+     LLM_TENSOR_ATTN_OUT_NORM,
+@@ -380,6 +390,11 @@ enum llm_tensor {
+     LLM_TENSOR_FFN_GATE,
+     LLM_TENSOR_FFN_DOWN,
+     LLM_TENSOR_FFN_UP,
++    LLM_TENSOR_TALKIE_MLP_GATE,
++    LLM_TENSOR_TALKIE_MLP_LINEAR,
++    LLM_TENSOR_TALKIE_MLP_RESID,
++    LLM_TENSOR_TALKIE_MLP_GAIN,
++    LLM_TENSOR_TALKIE_EMBED_SKIP,
+     LLM_TENSOR_FFN_ACT,
+     LLM_TENSOR_FFN_DOWN_EXP,  // split experts for backward compatibility
+     LLM_TENSOR_FFN_GATE_EXP,
+diff --git a/src/llama-model.cpp b/src/llama-model.cpp
+index 9e2a13c..9e194eb 100644
+--- a/src/llama-model.cpp
++++ b/src/llama-model.cpp
+@@ -1508,6 +1508,16 @@ void llama_model::load_hparams(llama_model_loader & ml) {
+                     default: type = LLM_TYPE_UNKNOWN;
+                 }
+             } break;
++        case LLM_ARCH_TALKIE:
++            {
++                if (!ml.get_key(LLM_KV_ATTENTION_LAYERNORM_RMS_EPS, hparams.f_norm_rms_eps, false)) {
++                    hparams.f_norm_rms_eps = 1e-5f;
++                }
++                switch (hparams.n_layer) {
++                    case 40: type = LLM_TYPE_13B; break;
++                    default: type = LLM_TYPE_UNKNOWN;
++                }
++            } break;
+         case LLM_ARCH_CODESHELL:
+             {
+                 ml.get_key(LLM_KV_ATTENTION_LAYERNORM_EPS, hparams.f_norm_eps);
+@@ -4328,6 +4338,31 @@ bool llama_model::load_tensors(llama_model_loader & ml) {
+                         layer.ffn_up_b   = create_tensor(tn(LLM_TENSOR_FFN_UP,   "bias", i),   {n_ff}, 0);
+                     }
+                 } break;
++            case LLM_ARCH_TALKIE:
++                {
++                    tok_embd = create_tensor(tn(LLM_TENSOR_TALKIE_TOKEN_EMBD, "weight"), {n_embd, n_vocab}, 0);
++                    output   = create_tensor(tn(LLM_TENSOR_TALKIE_OUTPUT),             {n_embd, n_vocab}, 0);
++                    talkie_output_gain = create_tensor(tn(LLM_TENSOR_TALKIE_OUTPUT_GAIN), {1}, 0);
++
++                    for (int i = 0; i < n_layer; ++i) {
++                        auto & layer = layers[i];
++
++                        layer.wq = create_tensor(tn(LLM_TENSOR_TALKIE_ATTN_Q, "weight", i), {n_embd, n_embd}, 0);
++                        layer.wk = create_tensor(tn(LLM_TENSOR_TALKIE_ATTN_K, "weight", i), {n_embd, n_embd}, 0);
++                        layer.wv = create_tensor(tn(LLM_TENSOR_TALKIE_ATTN_V, "weight", i), {n_embd, n_embd}, 0);
++                        layer.wo = create_tensor(tn(LLM_TENSOR_TALKIE_ATTN_OUT, "weight", i), {n_embd, n_embd}, 0);
++
++                        layer.talkie_attn_head_gain = create_tensor(tn(LLM_TENSOR_TALKIE_ATTN_HEAD_GAIN, i), {n_head}, 0);
++                        layer.talkie_attn_gain      = create_tensor(tn(LLM_TENSOR_TALKIE_ATTN_GAIN,      i), {1}, 0);
++
++                        layer.ffn_gate = create_tensor(tn(LLM_TENSOR_TALKIE_MLP_GATE,   "weight", i), {n_embd, n_ff}, 0);
++                        layer.ffn_up   = create_tensor(tn(LLM_TENSOR_TALKIE_MLP_LINEAR, "weight", i), {n_embd, n_ff}, 0);
++                        layer.ffn_down = create_tensor(tn(LLM_TENSOR_TALKIE_MLP_RESID,  "weight", i), {n_ff, n_embd}, 0);
++
++                        layer.talkie_mlp_gain   = create_tensor(tn(LLM_TENSOR_TALKIE_MLP_GAIN,   i), {1}, 0);
++                        layer.talkie_embed_skip = create_tensor(tn(LLM_TENSOR_TALKIE_EMBED_SKIP, i), {1}, 0);
++                    }
++                } break;
+             case LLM_ARCH_CODESHELL:
+                 {
+                     tok_embd = create_tensor(tn(LLM_TENSOR_TOKEN_EMBD, "weight"), {n_embd, n_vocab}, TENSOR_NOT_REQUIRED);
+@@ -8728,6 +8763,10 @@ ggml_cgraph * llama_model::build_graph(const llm_graph_params & params) const {
+             {
+                 llm = std::make_unique<llm_build_gpt2>(*this, params);
+             } break;
++        case LLM_ARCH_TALKIE:
++            {
++                llm = std::make_unique<llm_build_talkie>(*this, params);
++            } break;
+         case LLM_ARCH_CODESHELL:
+             {
+                 llm = std::make_unique<llm_build_codeshell>(*this, params);
+@@ -9293,6 +9332,7 @@ llama_rope_type llama_model_rope_type(const llama_model * model) {
+         case LLM_ARCH_STARCODER2:
+         case LLM_ARCH_OPENELM:
+         case LLM_ARCH_GPTNEOX:
++        case LLM_ARCH_TALKIE:
+         case LLM_ARCH_CODESHELL:
+         case LLM_ARCH_ORION:
+         case LLM_ARCH_NEMOTRON:
+diff --git a/src/llama-model.h b/src/llama-model.h
+index 5f101bd..6f11d5e 100644
+--- a/src/llama-model.h
++++ b/src/llama-model.h
+@@ -257,6 +257,8 @@ struct llama_layer {
+     struct ggml_tensor * wv_enc    = nullptr;
+     struct ggml_tensor * wo_enc    = nullptr;
+     struct ggml_tensor * wqkv_gate = nullptr;
++    struct ggml_tensor * talkie_attn_head_gain = nullptr;
++    struct ggml_tensor * talkie_attn_gain      = nullptr;
+ 
+     // relative position bias
+     struct ggml_tensor * attn_rel_b       = nullptr;
+@@ -322,6 +324,8 @@ struct llama_layer {
+     struct ggml_tensor * ffn_up_b   = nullptr; // b3
+     struct ggml_tensor * ffn_act    = nullptr;
+     struct ggml_tensor * ffn_exp_probs_b = nullptr;
++    struct ggml_tensor * talkie_mlp_gain   = nullptr;
++    struct ggml_tensor * talkie_embed_skip = nullptr;
+ 
+     // mamba proj
+     struct ggml_tensor * ssm_in  = nullptr;
+@@ -532,6 +536,7 @@ struct llama_model {
+     struct ggml_tensor * output          = nullptr;
+     struct ggml_tensor * output_b        = nullptr;
+     struct ggml_tensor * output_norm_enc = nullptr;
++    struct ggml_tensor * talkie_output_gain = nullptr;
+ 
+     // classifier
+     struct ggml_tensor * cls       = nullptr;
+diff --git a/src/llama-vocab.cpp b/src/llama-vocab.cpp
+index 163f222..f0980ba 100644
+--- a/src/llama-vocab.cpp
++++ b/src/llama-vocab.cpp
+@@ -424,6 +424,12 @@ struct llm_tokenizer_bpe : llm_tokenizer {
+                     "'s|'t|'re|'ve|'m|'ll|'d| ?\\p{L}+| ?\\p{N}+| ?[^\\s\\p{L}\\p{N}]+|\\s+(?!\\S)",
+                 };
+                 break;
++            case LLAMA_VOCAB_PRE_TYPE_TALKIE:
++                regex_exprs = {
++                    "[^\\r\\n\\p{L}\\p{N}]?[\\p{Lu}\\p{Lt}\\p{Lm}\\p{Lo}\\p{M}]*[\\p{Ll}\\p{Lm}\\p{Lo}\\p{M}]+(?:'[sS]|'[tT]|'[rR][eE]|'[vV][eE]|'[mM]|'[lL][lL]|'[dD])?|[^\\r\\n\\p{L}\\p{N}]?[\\p{Lu}\\p{Lt}\\p{Lm}\\p{Lo}\\p{M}]+[\\p{Ll}\\p{Lm}\\p{Lo}\\p{M}]*(?:'[sS]|'[tT]|'[rR][eE]|'[vV][eE]|'[mM]|'[lL][lL]|'[dD])?|\\p{N}{1,3}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n/]*|\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+",
++                };
++                byte_encode = false;
++                break;
+             case LLAMA_VOCAB_PRE_TYPE_GPT4O:
+             case LLAMA_VOCAB_PRE_TYPE_MINIMAX_M2:
+                 regex_exprs = {
+@@ -588,7 +594,7 @@ struct llm_tokenizer_bpe_session {
+ 
+             while (offset < word.size()) {
+                 llm_symbol sym;
+-                size_t char_len = std::min(word.size() - offset, (size_t) unicode_len_utf8(word[offset]));
++                size_t char_len = tok_pre == LLAMA_VOCAB_PRE_TYPE_TALKIE ? 1 : std::min(word.size() - offset, (size_t) unicode_len_utf8(word[offset]));
+                 sym.text = word.c_str() + offset;
+                 sym.n = char_len;
+                 offset += sym.n;
+@@ -660,7 +666,7 @@ struct llm_tokenizer_bpe_session {
+                 if (token == LLAMA_TOKEN_NULL) {
+                     for (auto j = str.begin(); j != str.end(); ++j) {
+                         llama_token token_multibyte = LLAMA_TOKEN_NULL;
+-                        if (tokenizer.byte_encode) {
++                        if (tokenizer.byte_encode || tok_pre == LLAMA_VOCAB_PRE_TYPE_TALKIE) {
+                             std::string byte_str(1, *j);
+                             token_multibyte = vocab.text_to_token(byte_str);
+                         } else {
+@@ -1651,6 +1657,7 @@ struct llama_vocab::impl {
+     bool remove_extra_whitespaces   = false;
+     bool escape_whitespaces         = true;
+     bool treat_whitespace_as_suffix = false;
++    bool bpe_ranks_from_tokens      = false;
+ 
+     std::unordered_map<std::string, llama_token> token_to_id;
+     std::vector<token_data>                      id_to_token;
+@@ -1800,6 +1807,17 @@ void llama_vocab::impl::load(llama_model_loader & ml, const LLM_KV & kv) {
+             special_mask_id = 103;
+ 
+             add_sep = true;
++        } else if (tokenizer_model == "tiktoken") {
++            type = LLAMA_VOCAB_TYPE_BPE;
++
++            bpe_ranks_from_tokens = true;
++
++            special_bos_id  = LLAMA_TOKEN_NULL;
++            special_eos_id  = LLAMA_TOKEN_NULL;
++            special_unk_id  = LLAMA_TOKEN_NULL;
++            special_sep_id  = LLAMA_TOKEN_NULL;
++            special_pad_id  = LLAMA_TOKEN_NULL;
++            special_mask_id = LLAMA_TOKEN_NULL;
+         } else if (tokenizer_model == "gpt2") {
+             type = LLAMA_VOCAB_TYPE_BPE;
+ 
+@@ -2102,6 +2120,11 @@ void llama_vocab::impl::load(llama_model_loader & ml, const LLM_KV & kv) {
+                 tokenizer_pre == "kanana2") {
+                 pre_type = LLAMA_VOCAB_PRE_TYPE_GPT4O;
+                 clean_spaces = false;
++            } else if (
++                tokenizer_pre == "talkie") {
++                pre_type = LLAMA_VOCAB_PRE_TYPE_TALKIE;
++                clean_spaces = false;
++                bpe_ranks_from_tokens = true;
+             } else if (
+                 tokenizer_pre == "tiny_aya") {
+                 pre_type = LLAMA_VOCAB_PRE_TYPE_TINY_AYA;
+@@ -2850,6 +2873,9 @@ uint8_t llama_vocab::impl::token_to_byte(llama_token id) const {
+             return strtol(buf.c_str(), NULL, 16);
+         }
+         case LLAMA_VOCAB_TYPE_BPE: {
++            if (pre_type == LLAMA_VOCAB_PRE_TYPE_TALKIE && token_data.text.size() == 1) {
++                return (uint8_t) token_data.text[0];
++            }
+             // Gemma4 uses BPE with SPM-style byte fallback tokens (<0xXX>)
+             auto buf = token_data.text.substr(3, 2);
+             return strtol(buf.c_str(), NULL, 16);
+@@ -3324,6 +3350,9 @@ int32_t llama_vocab::impl::token_to_piece(llama_token token, char * buf, int32_t
+                     return _try_copy(token_text.data(), token_text.size());
+                 }
+                 if (attr & LLAMA_TOKEN_ATTR_NORMAL) {
++                    if (pre_type == LLAMA_VOCAB_PRE_TYPE_TALKIE) {
++                        return _try_copy(token_text.data(), token_text.size());
++                    }
+                     if (escape_whitespaces) {
+                         // SPM-style BPE: tokens contain ▁ for spaces
+                         std::string result = token_text;
+@@ -3609,6 +3638,10 @@ llama_token llama_vocab::byte_to_token(uint8_t ch) const {
+         }
+         case LLAMA_VOCAB_TYPE_WPM:
+         case LLAMA_VOCAB_TYPE_BPE: {
++            if (pimpl->pre_type == LLAMA_VOCAB_PRE_TYPE_TALKIE) {
++                const char buf[2] = { (char)ch, 0 };
++                return pimpl->token_to_id.at(buf);
++            }
+             return pimpl->token_to_id.at(unicode_byte_to_utf8(ch));
+         }
+         case LLAMA_VOCAB_TYPE_PLAMO2: {
+@@ -3763,12 +3796,23 @@ int llama_vocab::max_token_len() const {
+ }
+ 
+ int llama_vocab::find_bpe_rank(const std::string & token_left, const std::string & token_right) const {
+-    GGML_ASSERT(token_left.find(' ')   == std::string::npos);
+-    GGML_ASSERT(token_right.find(' ')  == std::string::npos);
++    if (!pimpl->bpe_ranks_from_tokens) {
++        GGML_ASSERT(token_left.find(' ')   == std::string::npos);
++        GGML_ASSERT(token_right.find(' ')  == std::string::npos);
++    }
+ 
+     auto it = pimpl->bpe_ranks.find(std::make_pair(token_left, token_right));
+     if (it == pimpl->bpe_ranks.end()) {
+-        return -1;
++        if (!pimpl->bpe_ranks_from_tokens) {
++            return -1;
++        }
++
++        auto token_it = pimpl->token_to_id.find(token_left + token_right);
++        if (token_it == pimpl->token_to_id.end()) {
++            return -1;
++        }
++
++        return token_it->second;
+     }
+ 
+     return it->second;
+diff --git a/src/llama-vocab.h b/src/llama-vocab.h
+index dd38f45..c4ac6bc 100644
+--- a/src/llama-vocab.h
++++ b/src/llama-vocab.h
+@@ -59,6 +59,7 @@ enum llama_vocab_pre_type {
+     LLAMA_VOCAB_PRE_TYPE_JOYAI_LLM       = 48,
+     LLAMA_VOCAB_PRE_TYPE_JAIS2           = 49,
+     LLAMA_VOCAB_PRE_TYPE_GEMMA4          = 50,
++    LLAMA_VOCAB_PRE_TYPE_TALKIE          = 51,
+ };
+ 
+ struct LLM_KV;
+diff --git a/src/models/models.h b/src/models/models.h
+index 94991c5..d2b42c6 100644
+--- a/src/models/models.h
++++ b/src/models/models.h
+@@ -304,6 +304,10 @@ struct llm_build_gptneox : public llm_graph_context {
+     llm_build_gptneox(const llama_model & model, const llm_graph_params & params);
+ };
+ 
++struct llm_build_talkie : public llm_graph_context {
++    llm_build_talkie(const llama_model & model, const llm_graph_params & params);
++};
++
+ struct llm_build_granite : public llm_graph_context {
+     llm_build_granite(const llama_model & model, const llm_graph_params & params);
+ 
+diff --git a/tools/CMakeLists.txt b/tools/CMakeLists.txt
+index b433c91..c575a9e 100644
+--- a/tools/CMakeLists.txt
++++ b/tools/CMakeLists.txt
+@@ -19,6 +19,7 @@ else()
+     add_subdirectory(imatrix)
+     add_subdirectory(llama-bench)
+     add_subdirectory(completion)
++    add_subdirectory(talkie-logits)
+     add_subdirectory(perplexity)
+     add_subdirectory(quantize)
+     if (LLAMA_BUILD_SERVER)
+diff --git a/src/models/talkie.cpp b/src/models/talkie.cpp
+new file mode 100644
+index 0000000..f8fbc4a
+--- /dev/null
++++ b/src/models/talkie.cpp
+@@ -0,0 +1,114 @@
++#include "models.h"
++
++llm_build_talkie::llm_build_talkie(const llama_model & model, const llm_graph_params & params) : llm_graph_context(params) {
++    const int64_t n_embd_head = hparams.n_embd_head_k();
++
++    GGML_ASSERT(n_embd_head == hparams.n_embd_head_v());
++    GGML_ASSERT(n_embd_head == n_rot);
++
++    ggml_tensor * cur;
++    ggml_tensor * inpL;
++
++    inpL = build_inp_embd(model.tok_embd);
++    inpL = build_norm(inpL, nullptr, nullptr, LLM_NORM_RMS, -1);
++    cb(inpL, "inp_norm", -1);
++
++    ggml_tensor * e_x = inpL;
++
++    ggml_tensor * inp_pos     = build_inp_pos();
++    auto        * inp_attn    = build_attn_inp_kv();
++    ggml_tensor * inp_out_ids = build_inp_out_ids();
++
++    for (int il = 0; il < n_layer; ++il) {
++        const auto & layer = model.layers[il];
++
++        cur = build_norm(inpL, nullptr, nullptr, LLM_NORM_RMS, il);
++        cb(cur, "attn_norm", il);
++
++        {
++            auto [Qcur, Kcur, Vcur] = build_qkv(layer, cur, n_embd_head, n_head, n_head_kv, il);
++
++            Qcur = ggml_rope_ext_back(
++                    ctx0, Qcur, inp_pos, nullptr,
++                    n_rot, rope_type, n_ctx_orig, freq_base, freq_scale,
++                    ext_factor, attn_factor, beta_fast, beta_slow);
++
++            Kcur = ggml_rope_ext_back(
++                    ctx0, Kcur, inp_pos, nullptr,
++                    n_rot, rope_type, n_ctx_orig, freq_base, freq_scale,
++                    ext_factor, attn_factor, beta_fast, beta_slow);
++
++            Qcur = build_norm(Qcur, nullptr, nullptr, LLM_NORM_RMS, il);
++            Kcur = build_norm(Kcur, nullptr, nullptr, LLM_NORM_RMS, il);
++
++            ggml_tensor * head_gain = ggml_cast(ctx0, layer.talkie_attn_head_gain, GGML_TYPE_F32);
++            head_gain = ggml_reshape_3d(ctx0, head_gain, 1, n_head, 1);
++            Qcur = ggml_mul(ctx0, Qcur, head_gain);
++
++            cb(Qcur, "Qcur", il);
++            cb(Kcur, "Kcur", il);
++            cb(Vcur, "Vcur", il);
++
++            cur = build_attn(inp_attn,
++                    layer.wo, nullptr, nullptr,
++                    Qcur, Kcur, Vcur, nullptr, nullptr, nullptr,
++                    1.0f/sqrtf(float(n_embd_head)), il);
++            cb(cur, "attn_out", il);
++        }
++
++        ggml_tensor * residual = inpL;
++        ggml_tensor * e_x_cur  = e_x;
++
++        if (il == n_layer - 1 && inp_out_ids) {
++            cur      = ggml_get_rows(ctx0, cur,      inp_out_ids);
++            residual = ggml_get_rows(ctx0, residual, inp_out_ids);
++            e_x_cur  = ggml_get_rows(ctx0, e_x_cur,  inp_out_ids);
++        }
++
++        cur = ggml_mul(ctx0, cur, ggml_cast(ctx0, layer.talkie_attn_gain, GGML_TYPE_F32));
++        cb(cur, "attn_gain", il);
++
++        cur = ggml_add(ctx0, residual, cur);
++        cb(cur, "attn_resid", il);
++
++        ggml_tensor * ffn_inp = cur;
++
++        cur = build_norm(ffn_inp, nullptr, nullptr, LLM_NORM_RMS, il);
++        cb(cur, "ffn_norm", il);
++
++        cur = build_ffn(cur,
++                layer.ffn_up,   nullptr, nullptr,
++                layer.ffn_gate, nullptr, nullptr,
++                layer.ffn_down, nullptr, nullptr,
++                nullptr,
++                LLM_FFN_SILU, LLM_FFN_PAR, il);
++        cb(cur, "ffn_out", il);
++
++        cur = ggml_mul(ctx0, cur, ggml_cast(ctx0, layer.talkie_mlp_gain, GGML_TYPE_F32));
++        cb(cur, "mlp_gain", il);
++
++        cur = ggml_add(ctx0, ffn_inp, cur);
++        cb(cur, "mlp_resid", il);
++
++        ggml_tensor * embed_skip = ggml_mul(ctx0, e_x_cur, ggml_cast(ctx0, layer.talkie_embed_skip, GGML_TYPE_F32));
++        cb(embed_skip, "embed_skip", il);
++
++        cur = ggml_add(ctx0, cur, embed_skip);
++        cur = build_cvec(cur, il);
++        cb(cur, "l_out", il);
++
++        inpL = cur;
++    }
++
++    cur = build_norm(inpL, nullptr, nullptr, LLM_NORM_RMS, -1);
++    cb(cur, "result_norm", -1);
++    res->t_embd = cur;
++
++    cur = build_lora_mm(model.output, cur);
++    cur = ggml_mul(ctx0, cur, ggml_cast(ctx0, model.talkie_output_gain, GGML_TYPE_F32));
++
++    cb(cur, "result_output", -1);
++    res->t_logits = cur;
++
++    ggml_build_forward_expand(gf, cur);
++}
+diff --git a/tools/talkie-logits/CMakeLists.txt b/tools/talkie-logits/CMakeLists.txt
+new file mode 100644
+index 0000000..e1de868
+--- /dev/null
++++ b/tools/talkie-logits/CMakeLists.txt
+@@ -0,0 +1,8 @@
++set(TARGET llama-talkie-logits)
++add_executable(${TARGET} talkie-logits.cpp)
++target_link_libraries(${TARGET} PRIVATE llama ${CMAKE_THREAD_LIBS_INIT})
++target_compile_features(${TARGET} PRIVATE cxx_std_17)
++
++if(LLAMA_TOOLS_INSTALL)
++    install(TARGETS ${TARGET} RUNTIME)
++endif()
+diff --git a/tools/talkie-logits/talkie-logits.cpp b/tools/talkie-logits/talkie-logits.cpp
+new file mode 100644
+index 0000000..c3b1f5d
+--- /dev/null
++++ b/tools/talkie-logits/talkie-logits.cpp
+@@ -0,0 +1,242 @@
++#include "llama.h"
++
++#include <algorithm>
++#include <cctype>
++#include <clocale>
++#include <cstdio>
++#include <cstdlib>
++#include <cstring>
++#include <fstream>
++#include <iterator>
++#include <numeric>
++#include <string>
++#include <vector>
++
++static void print_usage(char ** argv) {
++    std::fprintf(stderr,
++            "usage: %s -m model.gguf [-f prompt.txt | -p prompt] [-ngl layers] [--top-k n] [--ctx n]\n",
++            argv[0]);
++}
++
++static bool read_file(const std::string & path, std::string & out) {
++    std::ifstream file(path, std::ios::binary);
++    if (!file) {
++        return false;
++    }
++
++    out.assign(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
++    return true;
++}
++
++static std::string escaped_piece(const llama_vocab * vocab, llama_token id) {
++    std::string buf(128, '\0');
++    int n = llama_token_to_piece(vocab, id, buf.data(), (int) buf.size(), 0, true);
++    if (n < 0) {
++        buf.assign((size_t) -n, '\0');
++        n = llama_token_to_piece(vocab, id, buf.data(), (int) buf.size(), 0, true);
++    }
++    if (n < 0) {
++        return "<piece-error>";
++    }
++
++    buf.resize((size_t) n);
++
++    std::string out;
++    out.reserve(buf.size());
++    for (unsigned char ch : buf) {
++        switch (ch) {
++            case '\n': out += "\\n"; break;
++            case '\r': out += "\\r"; break;
++            case '\t': out += "\\t"; break;
++            case '\\': out += "\\\\"; break;
++            case '"':  out += "\\\""; break;
++            default:
++                if (std::isprint(ch)) {
++                    out.push_back((char) ch);
++                } else {
++                    char tmp[8];
++                    std::snprintf(tmp, sizeof(tmp), "\\x%02X", ch);
++                    out += tmp;
++                }
++                break;
++        }
++    }
++
++    return out.empty() ? "<empty>" : out;
++}
++
++struct candidate {
++    llama_token id;
++    float logit;
++};
++
++static std::vector<candidate> top_logits(const float * logits, int n_vocab, int top_k) {
++    std::vector<int> ids((size_t) n_vocab);
++    std::iota(ids.begin(), ids.end(), 0);
++
++    const int k = std::min(top_k, n_vocab);
++    std::partial_sort(ids.begin(), ids.begin() + k, ids.end(), [&](int a, int b) {
++        return logits[a] > logits[b];
++    });
++
++    std::vector<candidate> out;
++    out.reserve((size_t) k);
++    for (int i = 0; i < k; ++i) {
++        const int id = ids[(size_t) i];
++        out.push_back({ id, logits[id] });
++    }
++    return out;
++}
++
++static void print_top(const char * label, const llama_vocab * vocab, const float * logits, int n_vocab, int top_k) {
++    if (!logits) {
++        std::printf("  %s: <null>\n", label);
++        return;
++    }
++
++    const auto top = top_logits(logits, n_vocab, top_k);
++    std::printf("  %s:\n", label);
++    for (size_t i = 0; i < top.size(); ++i) {
++        std::printf("    %2zu id=%6d logit=%9.4f piece=\"%s\"\n",
++                i + 1, top[i].id, top[i].logit, escaped_piece(vocab, top[i].id).c_str());
++    }
++}
++
++int main(int argc, char ** argv) {
++    std::setlocale(LC_NUMERIC, "C");
++
++    std::string model_path;
++    std::string prompt = "<|user|>What is your name?<|end|><|assistant|>";
++    std::string prompt_file;
++    int ngl = 99;
++    int top_k = 12;
++    int n_ctx = 128;
++    bool add_special = false;
++    bool parse_special = true;
++
++    for (int i = 1; i < argc; ++i) {
++        if (std::strcmp(argv[i], "-m") == 0 && i + 1 < argc) {
++            model_path = argv[++i];
++        } else if (std::strcmp(argv[i], "-p") == 0 && i + 1 < argc) {
++            prompt = argv[++i];
++        } else if (std::strcmp(argv[i], "-f") == 0 && i + 1 < argc) {
++            prompt_file = argv[++i];
++        } else if (std::strcmp(argv[i], "-ngl") == 0 && i + 1 < argc) {
++            ngl = std::atoi(argv[++i]);
++        } else if (std::strcmp(argv[i], "--top-k") == 0 && i + 1 < argc) {
++            top_k = std::atoi(argv[++i]);
++        } else if (std::strcmp(argv[i], "--ctx") == 0 && i + 1 < argc) {
++            n_ctx = std::atoi(argv[++i]);
++        } else if (std::strcmp(argv[i], "--add-special") == 0) {
++            add_special = true;
++        } else if (std::strcmp(argv[i], "--no-parse-special") == 0) {
++            parse_special = false;
++        } else {
++            print_usage(argv);
++            return 1;
++        }
++    }
++
++    if (model_path.empty()) {
++        print_usage(argv);
++        return 1;
++    }
++
++    if (!prompt_file.empty() && !read_file(prompt_file, prompt)) {
++        std::fprintf(stderr, "failed to read prompt file: %s\n", prompt_file.c_str());
++        return 1;
++    }
++
++    ggml_backend_load_all();
++
++    llama_model_params model_params = llama_model_default_params();
++    model_params.n_gpu_layers = ngl;
++
++    llama_model * model = llama_model_load_from_file(model_path.c_str(), model_params);
++    if (!model) {
++        std::fprintf(stderr, "failed to load model: %s\n", model_path.c_str());
++        return 1;
++    }
++
++    const llama_vocab * vocab = llama_model_get_vocab(model);
++    const int n_vocab = llama_vocab_n_tokens(vocab);
++
++    const int n_prompt = -llama_tokenize(vocab, prompt.c_str(), (int) prompt.size(), nullptr, 0, add_special, parse_special);
++    if (n_prompt <= 0) {
++        std::fprintf(stderr, "failed to estimate prompt token count\n");
++        llama_model_free(model);
++        return 1;
++    }
++
++    std::vector<llama_token> tokens((size_t) n_prompt);
++    const int n_tok = llama_tokenize(vocab, prompt.c_str(), (int) prompt.size(), tokens.data(), n_prompt, add_special, parse_special);
++    if (n_tok < 0) {
++        std::fprintf(stderr, "failed to tokenize prompt\n");
++        llama_model_free(model);
++        return 1;
++    }
++    tokens.resize((size_t) n_tok);
++
++    n_ctx = std::max(n_ctx, (int) tokens.size() + 8);
++
++    llama_context_params ctx_params = llama_context_default_params();
++    ctx_params.n_ctx = (uint32_t) n_ctx;
++    ctx_params.n_batch = (uint32_t) tokens.size();
++    ctx_params.n_ubatch = (uint32_t) tokens.size();
++    ctx_params.no_perf = false;
++
++    llama_context * ctx = llama_init_from_model(model, ctx_params);
++    if (!ctx) {
++        std::fprintf(stderr, "failed to create context\n");
++        llama_model_free(model);
++        return 1;
++    }
++
++    llama_batch batch = llama_batch_init((int32_t) tokens.size(), 0, 1);
++    for (size_t i = 0; i < tokens.size(); ++i) {
++        batch.token[i] = tokens[i];
++        batch.pos[i] = (llama_pos) i;
++        batch.n_seq_id[i] = 1;
++        batch.seq_id[i][0] = 0;
++        batch.logits[i] = 1;
++    }
++    batch.n_tokens = (int32_t) tokens.size();
++
++    const int decode_status = llama_decode(ctx, batch);
++    if (decode_status != 0) {
++        std::fprintf(stderr, "llama_decode failed: %d\n", decode_status);
++        llama_batch_free(batch);
++        llama_free(ctx);
++        llama_model_free(model);
++        return 1;
++    }
++
++    float * all_logits = llama_get_logits(ctx);
++
++    std::printf("model=%s\n", model_path.c_str());
++    std::printf("ngl=%d n_ctx=%d top_k=%d add_special=%s parse_special=%s\n",
++            ngl, n_ctx, top_k, add_special ? "true" : "false", parse_special ? "true" : "false");
++    std::printf("prompt=%s\n", prompt.c_str());
++    std::printf("tokens=%zu vocab=%d\n", tokens.size(), n_vocab);
++    for (size_t i = 0; i < tokens.size(); ++i) {
++        std::printf("  [%zu] id=%6d piece=\"%s\"\n", i, tokens[i], escaped_piece(vocab, tokens[i]).c_str());
++    }
++
++    for (size_t i = 0; i < tokens.size(); ++i) {
++        const float * raw = all_logits ? all_logits + i * (size_t) n_vocab : nullptr;
++        const float * ith = llama_get_logits_ith(ctx, (int32_t) i);
++        std::printf("\nrow=%zu input_id=%d input_piece=\"%s\"\n",
++                i, tokens[i], escaped_piece(vocab, tokens[i]).c_str());
++        print_top("raw-contiguous", vocab, raw, n_vocab, top_k);
++        if (ith != raw) {
++            print_top("llama_get_logits_ith", vocab, ith, n_vocab, top_k);
++        }
++    }
++
++    llama_batch_free(batch);
++    llama_free(ctx);
++    llama_model_free(model);
++    llama_backend_free();
++
++    return 0;
++}

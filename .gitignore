@@ -1,0 +1,17 @@
+node_modules/
+server.*.log
+*.log
+
+# Large generated release artifacts.
+models/*.gguf
+models/*.part*
+release-assets/*
+!release-assets/.gitkeep
+
+# Optional local runtime binaries unpacked from a release.
+runtime/win-cuda12.8/*.exe
+runtime/win-cuda12.8/*.dll
+runtime/win-cuda12.8/*.lib
+runtime/win-cuda12.8/*.pdb
+
+.env
