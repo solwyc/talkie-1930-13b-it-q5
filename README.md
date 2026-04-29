@@ -13,25 +13,34 @@ requires a runtime with Talkie architecture support.
 - `talkie-1930-13b-it-q5.gguf`: Q5_0 GGUF, about 9.13 GB.
 - `server.js` and `public/`: local browser chat app with streaming and TPS.
 - `scripts/start.ps1`: launches the app against a patched `llama-server.exe`.
+- `scripts/start.sh`: Unix launcher for Linux CUDA and macOS Metal runtime layouts.
 - `patches/`: Talkie support patch for llama.cpp.
 - `scripts/package-runtime.ps1`: builds a Windows runtime zip from a local patched build.
+- `scripts/build-llama-linux-cuda.sh`: blind Linux CUDA build helper.
+- `scripts/build-llama-macos-metal.sh`: blind macOS Metal build helper.
 - `scripts/split-gguf.ps1` and `scripts/join-gguf.ps1`: GitHub release helpers for the large GGUF.
 
 ## Quick Start
 
 Requirements:
 
-- Windows
+- Windows, Linux, or macOS
 - Node.js 20+
-- NVIDIA GPU recommended
-- CUDA 12 runtime DLLs on `PATH`, or pass `-CudaBin`
-- Patched Talkie-aware `llama-server.exe`
+- NVIDIA GPU recommended on Windows/Linux; Apple Silicon recommended on macOS
+- CUDA 12 runtime DLLs on `PATH` for Windows/Linux CUDA, or pass `-CudaBin` / `LLAMA_CUDA_BIN`
+- Patched Talkie-aware `llama-server`
 - The Q5 GGUF at `models\talkie-1930-13b-it-q5.gguf`
 
 From this repo:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -Autoload
+```
+
+On Linux or macOS:
+
+```bash
+./scripts/start.sh --autoload
 ```
 
 Then open:
@@ -54,6 +63,33 @@ threads:      4
 
 These defaults were selected for an RTX 4070 12 GB after testing that `-ngl 26`
 was stable and `-ngl 27` produced NaNs in the local diagnostic build.
+
+## Platform Runtime Status
+
+| Platform | Runtime path | Status |
+| --- | --- | --- |
+| Windows CUDA 12.8 | `runtime/win-cuda12.8/llama-server.exe` | Tested locally on RTX 4070 12 GB |
+| Linux CUDA | `runtime/linux-cuda/llama-server` | Build script included, not maintainer-tested |
+| macOS Metal | `runtime/macos-metal/llama-server` | Build script included, not maintainer-tested |
+
+Important caveat, exactly because this is a hobby-lab artifact: the Linux/Mac
+ports were built blindly with GPT-5.5 assistance since I cannot test them yet.
+Please treat those scripts as a starting point until someone runs them on real
+Linux/macOS hardware and reports back.
+
+Build Linux CUDA runtime:
+
+```bash
+LLAMA_CPP_DIR=/path/to/llama.cpp ./scripts/build-llama-linux-cuda.sh
+LLAMA_BIN_DIR=/path/to/llama.cpp/build-talkie-cuda/bin ./scripts/package-runtime-linux-cuda.sh
+```
+
+Build macOS Metal runtime:
+
+```bash
+LLAMA_CPP_DIR=/path/to/llama.cpp ./scripts/build-llama-macos-metal.sh
+LLAMA_BIN_DIR=/path/to/llama.cpp/build-talkie-metal/bin ./scripts/package-runtime-macos-metal.sh
+```
 
 ## Downloading The Model From A GitHub Release
 
@@ -140,7 +176,8 @@ dominate. llama.cpp timing on a 53-token smoke response reported about
 - It is period-oriented but not a perfect historical oracle.
 - The patch needs upstreaming or a custom runtime distribution before normal
   LM Studio users can load the GGUF directly.
-- CUDA/Windows packaging is the only runtime path prepared in this repo today.
+- Linux CUDA and macOS Metal scripts are blind ports and need real hardware
+  validation before they should be described as supported.
 
 ## License And Attribution
 

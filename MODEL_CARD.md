@@ -45,6 +45,11 @@ Recommended tested setting:
 .\scripts\start.ps1 -Autoload -GpuLayers 26 -ContextSize 1024
 ```
 
+Linux/macOS build scripts are included, but they were drafted blindly with
+GPT-5.5 assistance from a Windows machine and have not been maintainer-tested.
+Treat them as experimental port scaffolding until validated on real Linux CUDA
+and macOS Metal hardware.
+
 ## Evaluation Snapshot
 
 The local evaluation loop focused on:

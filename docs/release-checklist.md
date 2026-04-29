@@ -9,6 +9,13 @@ Before publishing a GitHub release:
 powershell -ExecutionPolicy Bypass -File scripts\package-runtime.ps1
 ```
 
+Optional blind-port runtime packages, after testing/building on those platforms:
+
+```bash
+./scripts/package-runtime-linux-cuda.sh
+./scripts/package-runtime-macos-metal.sh
+```
+
 3. Split the GGUF into GitHub-sized release assets:
 
 ```powershell

@@ -19,13 +19,16 @@ const PORT = Number.parseInt(flagValue("--port") || process.env.PORT || "5177", 
 const MOCK_MODE = hasFlag("--mock") || /^(1|true|yes)$/i.test(process.env.TALKIE_MOCK || "");
 const REQUESTED_BACKEND = (flagValue("--backend") || process.env.TALKIE_BACKEND || "python").toLowerCase();
 const ACTIVE_BACKEND = MOCK_MODE ? "mock" : REQUESTED_BACKEND;
-const LLAMA_SERVER_BIN = path.resolve(process.env.LLAMA_SERVER_BIN || path.join(APP_ROOT, "runtime", "win-cuda12.8", "llama-server.exe"));
+const DEFAULT_RUNTIME_DIR = defaultRuntimeDir();
+const DEFAULT_LLAMA_SERVER_BIN = defaultLlamaServerBin(DEFAULT_RUNTIME_DIR);
+const DEFAULT_LLAMA_ACCEL_BIN = defaultLlamaAccelBin(DEFAULT_RUNTIME_DIR);
+const LLAMA_SERVER_BIN = path.resolve(process.env.LLAMA_SERVER_BIN || DEFAULT_LLAMA_SERVER_BIN);
 const LLAMA_MODEL_PATH = path.resolve(process.env.LLAMA_MODEL || process.env.TALKIE_GGUF || path.join(APP_ROOT, "models", "talkie-1930-13b-it-q5.gguf"));
 const LLAMA_MODEL_ALIAS = process.env.LLAMA_MODEL_ALIAS || path.basename(LLAMA_MODEL_PATH, ".gguf");
 const LLAMA_HOST = process.env.LLAMA_HOST || "127.0.0.1";
 const LLAMA_PORT = Number.parseInt(process.env.LLAMA_PORT || "8187", 10);
 const LLAMA_BASE_URL = (process.env.LLAMA_BASE_URL || `http://${LLAMA_HOST}:${LLAMA_PORT}`).replace(/\/$/, "");
-const LLAMA_CUDA_BIN = path.resolve(process.env.LLAMA_CUDA_BIN || path.join(APP_ROOT, "runtime", "win-cuda12.8"));
+const LLAMA_CUDA_BIN = path.resolve(process.env.LLAMA_CUDA_BIN || DEFAULT_LLAMA_ACCEL_BIN);
 const LLAMA_EXTERNAL = /^(1|true|yes)$/i.test(process.env.LLAMA_EXTERNAL || "");
 const LLAMA_N_GPU_LAYERS = process.env.LLAMA_N_GPU_LAYERS || process.env.TALKIE_LLAMA_NGL || "26";
 const LLAMA_CTX_SIZE = process.env.LLAMA_CTX_SIZE || "1024";
@@ -1005,6 +1008,23 @@ function shutdownActiveBackend() {
 function formatArg(arg) {
   const text = String(arg);
   return /\s/.test(text) ? `"${text.replace(/"/g, '\\"')}"` : text;
+}
+
+function defaultRuntimeDir() {
+  if (process.platform === "win32") return path.join(APP_ROOT, "runtime", "win-cuda12.8");
+  if (process.platform === "darwin") return path.join(APP_ROOT, "runtime", "macos-metal");
+  return path.join(APP_ROOT, "runtime", "linux-cuda");
+}
+
+function defaultLlamaServerBin(runtimeDir) {
+  return path.join(runtimeDir, process.platform === "win32" ? "llama-server.exe" : "llama-server");
+}
+
+function defaultLlamaAccelBin(runtimeDir) {
+  if (process.platform !== "win32") return runtimeDir;
+  const cudaRoot = process.env.CUDA_PATH || "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.8";
+  const cudaBin = path.join(cudaRoot, "bin");
+  return fs.existsSync(cudaBin) ? cudaBin : runtimeDir;
 }
 
 async function streamMock(payload, send) {
