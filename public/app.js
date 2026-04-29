@@ -4,6 +4,7 @@ const promptEl = document.querySelector("#prompt");
 const sendBtn = document.querySelector("#sendBtn");
 const stopBtn = document.querySelector("#stopBtn");
 const clearBtn = document.querySelector("#clearBtn");
+const storageFeedback = document.querySelector("#storageFeedback");
 const runtimeText = document.querySelector("#runtimeText");
 const runtimePill = document.querySelector("#runtimePill");
 const modelLine = document.querySelector("#modelLine");
@@ -30,12 +31,17 @@ const speedValue = document.querySelector("#speedValue");
 const tokenValue = document.querySelector("#tokenValue");
 const elapsedValue = document.querySelector("#elapsedValue");
 
+const DEFAULT_SYSTEM_PROMPT = "Your name is John Talkie from Akron, Ohio";
+const LEGACY_SYSTEM_PROMPT = "Your name is Talkie. You are a local language model. Answer directly; do not invent personal history or sources.";
+
 const state = {
   messages: JSON.parse(localStorage.getItem("talkie.messages") || "[]"),
   controller: null,
   isStreaming: false,
+  feedbackTimer: null,
 };
 
+restoreSettings();
 renderMessages();
 refreshStatus();
 setInterval(refreshStatus, 5000);
@@ -53,6 +59,29 @@ promptEl.addEventListener("input", () => {
   promptEl.style.height = `${Math.min(promptEl.scrollHeight, 180)}px`;
 });
 
+promptEl.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+  event.preventDefault();
+  composer.requestSubmit();
+});
+
+systemPrompt.addEventListener("input", () => {
+  localStorage.setItem("talkie.systemPrompt", systemPrompt.value);
+  showFeedback("System prompt saved");
+});
+
+groundingToggle.addEventListener("change", () => {
+  localStorage.setItem("talkie.grounding", groundingToggle.checked ? "1" : "0");
+  showFeedback(groundingToggle.checked ? "Grounding enabled" : "Grounding disabled");
+});
+
+for (const input of [temperature, maxTokens, topP, topK, repetitionPenalty, noRepeatNgramSize]) {
+  input.addEventListener("change", () => {
+    saveSettings();
+    showFeedback("Settings saved");
+  });
+}
+
 composer.addEventListener("submit", async (event) => {
   event.preventDefault();
   const prompt = promptEl.value.trim();
@@ -61,6 +90,7 @@ composer.addEventListener("submit", async (event) => {
   promptEl.value = "";
   promptEl.style.height = "auto";
   appendMessage("user", prompt);
+  showFeedback("Message saved");
   const assistantMessage = appendMessage("assistant", "");
   await streamReply(assistantMessage);
 });
@@ -72,6 +102,8 @@ clearBtn.addEventListener("click", () => {
   renderMessages();
   speedValue.textContent = "-";
   tokenValue.textContent = "-";
+  elapsedValue.textContent = "-";
+  showFeedback("Conversation deleted");
 });
 
 stopBtn.addEventListener("click", () => {
@@ -99,6 +131,7 @@ runtimeStopBtn.addEventListener("click", async () => {
     speedValue.textContent = "-";
     tokenValue.textContent = "-";
     elapsedValue.textContent = "-";
+    showFeedback("Runtime stopped");
     refreshStatus();
   }
 });
@@ -162,6 +195,7 @@ async function streamReply(assistantMessage) {
       updateMessage(assistantMessage);
     }
     persistMessages();
+    showFeedback("Reply saved");
     state.controller = null;
     state.isStreaming = false;
     setBusy(false);
@@ -309,6 +343,59 @@ function updateMetrics(data) {
 
 function persistMessages() {
   localStorage.setItem("talkie.messages", JSON.stringify(state.messages));
+}
+
+function restoreSettings() {
+  const savedSystemPrompt = localStorage.getItem("talkie.systemPrompt");
+  systemPrompt.value = !savedSystemPrompt || savedSystemPrompt === LEGACY_SYSTEM_PROMPT
+    ? DEFAULT_SYSTEM_PROMPT
+    : savedSystemPrompt;
+
+  const savedGrounding = localStorage.getItem("talkie.grounding");
+  groundingToggle.checked = savedGrounding === "1";
+
+  const savedSettings = safeJsonParse(localStorage.getItem("talkie.settings"));
+  if (savedSettings) {
+    if (savedSettings.temperature !== undefined) temperature.value = savedSettings.temperature;
+    if (savedSettings.maxTokens !== undefined) maxTokens.value = savedSettings.maxTokens;
+    if (savedSettings.topP !== undefined) topP.value = savedSettings.topP;
+    if (savedSettings.topK !== undefined) topK.value = savedSettings.topK;
+    if (savedSettings.repetitionPenalty !== undefined) repetitionPenalty.value = savedSettings.repetitionPenalty;
+    if (savedSettings.noRepeatNgramSize !== undefined) noRepeatNgramSize.value = savedSettings.noRepeatNgramSize;
+  }
+
+  temperatureOut.value = Number(temperature.value).toFixed(2);
+  repetitionPenaltyOut.value = Number(repetitionPenalty.value).toFixed(2);
+}
+
+function saveSettings() {
+  localStorage.setItem("talkie.settings", JSON.stringify({
+    temperature: temperature.value,
+    maxTokens: maxTokens.value,
+    topP: topP.value,
+    topK: topK.value,
+    repetitionPenalty: repetitionPenalty.value,
+    noRepeatNgramSize: noRepeatNgramSize.value,
+  }));
+}
+
+function showFeedback(message) {
+  storageFeedback.textContent = message;
+  storageFeedback.dataset.state = "active";
+  window.clearTimeout(state.feedbackTimer);
+  state.feedbackTimer = window.setTimeout(() => {
+    storageFeedback.textContent = "Saved locally";
+    storageFeedback.dataset.state = "";
+  }, 1800);
+}
+
+function safeJsonParse(text) {
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
 }
 
 function syncRuntimeButtons(runtimeState, backend) {

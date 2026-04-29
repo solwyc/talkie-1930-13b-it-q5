@@ -195,7 +195,7 @@ h1 {
 
 .composer {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   padding: 16px;
   border-top: 1px solid var(--line);
   background: var(--panel-soft);
@@ -230,6 +230,22 @@ h1 {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.composer-status {
+  display: flex;
+  justify-content: flex-start;
+  min-height: 18px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.composer-status span {
+  transition: color 140ms ease;
+}
+
+.composer-status span[data-state="active"] {
+  color: var(--teal-dark);
 }
 
 .send-button,

@@ -27,6 +27,9 @@
 
         <form class="composer" id="composer">
           <textarea id="prompt" name="prompt" rows="2" placeholder="Ask Talkie..." autocomplete="off"></textarea>
+          <div class="composer-status">
+            <span id="storageFeedback" role="status" aria-live="polite">Saved locally</span>
+          </div>
           <div class="composer-actions">
             <button type="button" id="clearBtn" class="ghost-button">Clear</button>
             <button type="button" id="stopBtn" class="ghost-button" disabled>Stop</button>
@@ -68,9 +71,9 @@
 
         <section class="control-group">
           <h2>System</h2>
-          <textarea id="systemPrompt" rows="6" spellcheck="true" placeholder="Optional system message">Your name is Talkie. You are a local language model. Answer directly; do not invent personal history or sources.</textarea>
+          <textarea id="systemPrompt" rows="6" spellcheck="true" placeholder="Optional system message">Your name is John Talkie from Akron, Ohio</textarea>
           <label class="toggle-row">
-            <input id="groundingToggle" type="checkbox" checked>
+            <input id="groundingToggle" type="checkbox">
             <span>Ground identity</span>
           </label>
         </section>

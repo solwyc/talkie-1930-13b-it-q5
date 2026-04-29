@@ -49,6 +49,8 @@ Then open:
 http://localhost:5177
 ```
 
+In the chat box, Enter sends and Shift+Enter inserts a new line.
+
 Default runtime settings:
 
 ```text
