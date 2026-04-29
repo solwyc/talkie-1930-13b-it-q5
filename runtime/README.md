@@ -9,6 +9,17 @@ runtime/linux-cuda/llama-server
 runtime/macos-metal/llama-server
 ```
 
+The installer scripts download and unpack the matching runtime archive when it
+is available:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\install-and-start.ps1
+```
+
+```bash
+./scripts/install-and-start.sh
+```
+
 The Windows runtime is tested locally. The Linux and macOS lanes are build
 scripts plus expected packaging layout, but they have not been maintainer-tested
 yet.

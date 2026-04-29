@@ -3,6 +3,12 @@
 An experimental consumer-GPU GGUF build of Talkie 1930 13B IT, packaged with a
 small local Node chat app and a patched llama.cpp runtime path.
 
+Downloads:
+
+- Hugging Face model repo: https://huggingface.co/sol-wy/talkie-1930-13b-it-q5
+- GitHub runtime/source repo: https://github.com/solwyc/talkie-1930-13b-it-q5
+- GitHub release assets: https://github.com/solwyc/talkie-1930-13b-it-q5/releases/tag/v0.1.0
+
 This release is for people who want to try a fast-ish, local, conversational
 Talkie on hardware like an RTX 4070 12 GB. It is not yet a stock LM Studio or
 stock llama.cpp model. The GGUF uses `general.architecture = talkie`, so it
@@ -12,6 +18,9 @@ requires a runtime with Talkie architecture support.
 
 - `talkie-1930-13b-it-q5.gguf`: Q5_0 GGUF, about 9.13 GB.
 - `server.js` and `public/`: local browser chat app with streaming and TPS.
+- `scripts/install-and-start.ps1`: Windows installer/launcher that downloads the model and runtime.
+- `scripts/install-and-start.sh`: Linux/macOS installer/launcher that downloads the model and packaged runtime when available.
+- `scripts/download-model.js`: dependency-free Node downloader for the Hugging Face GGUF.
 - `scripts/start.ps1`: launches the app against a patched `llama-server.exe`.
 - `scripts/start.sh`: Unix launcher for Linux CUDA and macOS Metal runtime layouts.
 - `patches/`: Talkie support patch for llama.cpp.
@@ -22,16 +31,51 @@ requires a runtime with Talkie architecture support.
 
 ## Quick Start
 
+The easiest path is to use the installer for your platform. It downloads the
+single GGUF from Hugging Face, downloads the packaged runtime if one exists for
+your platform, and starts the local app.
+
 Requirements:
 
 - Windows, Linux, or macOS
 - Node.js 20+
 - NVIDIA GPU recommended on Windows/Linux; Apple Silicon recommended on macOS
 - CUDA 12 runtime DLLs on `PATH` for Windows/Linux CUDA, or pass `-CudaBin` / `LLAMA_CUDA_BIN`
-- Patched Talkie-aware `llama-server`
-- The Q5 GGUF at `models\talkie-1930-13b-it-q5.gguf`
 
-From this repo:
+Clone the repo:
+
+```bash
+git clone https://github.com/solwyc/talkie-1930-13b-it-q5.git
+cd talkie-1930-13b-it-q5
+```
+
+Windows:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\install-and-start.ps1
+```
+
+Or double-click/run:
+
+```text
+scripts\install-and-start.cmd
+```
+
+Linux or macOS:
+
+```bash
+./scripts/install-and-start.sh
+```
+
+Then open:
+
+```text
+http://localhost:5177
+```
+
+In the chat box, Enter sends and Shift+Enter inserts a new line.
+
+Manual start, after the model/runtime are already present:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -Autoload
@@ -42,14 +86,6 @@ On Linux or macOS:
 ```bash
 ./scripts/start.sh --autoload
 ```
-
-Then open:
-
-```text
-http://localhost:5177
-```
-
-In the chat box, Enter sends and Shift+Enter inserts a new line.
 
 Default runtime settings:
 
@@ -93,7 +129,28 @@ LLAMA_CPP_DIR=/path/to/llama.cpp ./scripts/build-llama-macos-metal.sh
 LLAMA_BIN_DIR=/path/to/llama.cpp/build-talkie-metal/bin ./scripts/package-runtime-macos-metal.sh
 ```
 
-## Downloading The Model From A GitHub Release
+## Downloading The Model
+
+The model is hosted as a single GGUF on Hugging Face:
+
+```text
+https://huggingface.co/sol-wy/talkie-1930-13b-it-q5
+```
+
+The platform installers call this command automatically if
+`models/talkie-1930-13b-it-q5.gguf` is missing:
+
+```bash
+npm run download:model
+```
+
+Expected SHA256:
+
+```text
+B6025276018B228CB35CDC76F2D957EB8037EA595F7C9486BC2971ECAFEAD0BA
+```
+
+### GitHub Split-File Fallback
 
 GitHub release assets must each be under 2 GiB, so the GGUF may be published as
 split parts:
@@ -116,9 +173,6 @@ Expected SHA256:
 ```text
 B6025276018B228CB35CDC76F2D957EB8037EA595F7C9486BC2971ECAFEAD0BA
 ```
-
-When this model is uploaded to Hugging Face, the HF repo can host the GGUF as a
-single file, which is much nicer for normal users.
 
 ## Runtime Compatibility
 

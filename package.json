@@ -5,6 +5,8 @@
   "description": "Local Node web chat for the Talkie 1930 13B instruction-tuned Q5 GGUF.",
   "type": "commonjs",
   "scripts": {
+    "download:model": "node scripts/download-model.js",
+    "setup": "node scripts/download-model.js",
     "start": "node server.js --backend=llama",
     "start:llama": "node server.js --backend=llama",
     "start:llama:autoload": "node server.js --backend=llama --autoload",

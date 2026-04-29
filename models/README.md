@@ -6,6 +6,18 @@ Place the Q5 GGUF here:
 models/talkie-1930-13b-it-q5.gguf
 ```
 
+The recommended path is to download the single GGUF from Hugging Face:
+
+```bash
+npm run download:model
+```
+
+Model page:
+
+```text
+https://huggingface.co/sol-wy/talkie-1930-13b-it-q5
+```
+
 The GitHub release may publish the GGUF in split parts because GitHub release
 assets must each be under 2 GiB. Download all parts, then run:
 
